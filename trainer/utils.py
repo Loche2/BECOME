@@ -91,51 +91,6 @@ def kl_agreements_and_intersctions_for_ks(scores, soft_labels, ks, k_kl=100, aut
     return metrics, metrics_each
 
 
-def lambda_loss(scores: torch.Tensor, relevance: torch.Tensor):
-    """
-    支持 batch 的基于 NDCG 的 LambdaLoss 实现，shape = [B, N]
-    scores: 模型预测打分, shape = [B, N]
-    relevance: 真实相关性标签, shape = [B, N]
-    """
-    B, N = scores.shape
-    device = scores.device
-
-    loss = 0.0
-    for b in range(B):
-        s = scores[b]       # [N]
-        r = relevance[b]    # [N]
-
-        # 获取模型排序位置
-        _, rank_indices = torch.sort(s, descending=True)
-        ranks = torch.zeros_like(s, dtype=torch.float)
-        ranks[rank_indices] = torch.arange(N, dtype=torch.float, device=device)
-
-        # 构造 pairwise
-        i_idx = torch.arange(N, device=device).unsqueeze(1).repeat(1, N).view(-1)
-        j_idx = torch.arange(N, device=device).repeat(N)
-
-        rel_i = r[i_idx]
-        rel_j = r[j_idx]
-        score_i = s[i_idx]
-        score_j = s[j_idx]
-        rank_i = ranks[i_idx]
-        rank_j = ranks[j_idx]
-
-        # 仅保留 rel_i > rel_j 的正负对
-        valid_pair = rel_i > rel_j
-        if valid_pair.sum() == 0:
-            continue  # 跳过无有效对的样本
-
-        delta_ndcg = torch.abs(1.0 / torch.log2(rank_i[valid_pair] + 2.0) -
-                               1.0 / torch.log2(rank_j[valid_pair] + 2.0))
-
-        pair_loss = F.softplus(-(score_i[valid_pair] - score_j[valid_pair]))
-        sample_loss = (delta_ndcg * pair_loss).sum() / delta_ndcg.sum().clamp(min=1e-6)
-        loss += sample_loss
-
-    return loss / B
-
-
 class AverageMeterSet(object):
     def __init__(self, meters=None):
         self.meters = meters if meters else {}
@@ -193,57 +148,6 @@ class AverageMeter(object):
     def __format__(self, format):
         return "{self.val:{format}} ({self.avg:{format}})".format(self=self, format=format)
 
-def generate_error_lists(blackbox_list, whitebox_list):
-    """
-    生成Vl, Vh, Tl, Th四个列表的完整逻辑
-    :param blackbox_list: 黑盒推荐列表（按排名顺序排列的item_id）
-    :param whitebox_list: 白盒推荐列表（按预测排名顺序排列的item_id）
-    :return: Vl, Vh, Tl, Th四个列表的字典
-    """
-    # 预处理数据结构
-    black_rank = {item: idx+1 for idx, item in enumerate(blackbox_list)}  # 黑盒项目排名（从1开始）
-    white_rank = {item: idx+1 for idx, item in enumerate(whitebox_list)}  # 白盒项目排名（从1开始）
-    black_set = set(blackbox_list)  # 用于快速存在性检查
-    
-    # 第一阶段：生成Vl和Vh
-    Vl, Vh = [], []
-    for item in blackbox_list:
-        if item not in white_rank: continue  # 白盒未推荐则跳过
-        if black_rank[item] > white_rank[item]:  # 黑盒排名更靠后（低估）
-            Vl.append(item)
-        elif black_rank[item] < white_rank[item]:  # 黑盒排名更靠前（过估）
-            Vh.append(item)
-
-    # 第二阶段：生成Tl和Th
-    def find_target_items(ref_rank, search_range, condition):
-        targets = []
-        for item in search_range:
-            pos = ref_rank - 1  # 转换为0-based索引
-            if pos >= len(whitebox_list): continue
-            # 按条件查找目标位置
-            while 0 <= pos < len(whitebox_list):
-                candidate = whitebox_list[pos]
-                if candidate not in black_set:
-                    targets.append(candidate)
-                    break  # 找到第一个符合条件的即停止
-                pos += 1 if condition == 'later' else -1
-        return list(dict.fromkeys(targets))  # 去重保持顺序
-
-    # 生成Tl（基于Vl的黑盒排名位置向后查找）
-    Tl = find_target_items(
-        ref_rank=np.mean([black_rank[item] for item in Vl]) if Vl else 0,
-        search_range=Vl,
-        condition='later'
-    )
-
-    # 生成Th（基于Vh的黑盒排名位置向前查找）
-    Th = find_target_items(
-        ref_rank=np.mean([black_rank[item] for item in Vh]) if Vh else 0,
-        search_range=Vh,
-        condition='earlier'
-    )
-
-    return {'Vl': Vl, 'Vh': Vh, 'Tl': Tl, 'Th': Th}
 
 def random_len(target_sum, num_elements, mean=0, std_dev=1):
     """

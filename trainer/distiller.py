@@ -30,7 +30,7 @@ import copy
 
 
 class AutoDataRankDistillationTrainer(metaclass=ABCMeta):
-    def __init__(self, args, model_code, model, bb_model, test_loader, export_root, loss='ranking', tau=1., margin_topk=0.75, margin_neg=1.5):
+    def __init__(self, args, model_code, model, bb_model, test_loader, export_root, loss='ranking', tau=1., margin_topk=0.5, margin_neg=1.0):
         self.args = args
         self.device = args.device
         self.num_items = args.num_items
@@ -445,10 +445,10 @@ class AutoDataRankDistillationTrainer(metaclass=ABCMeta):
                             selected_candidates = torch.cat((selected_candidates, sorted_items.unsqueeze(1)), 1)
 
                         elif isinstance(self.bb_model, NARM):
-                            selected_seqs = [seq + [0] * (self.max_len - auto_round_len - len(seq)) for seq in selected_seqs]
-                            print(selected_seqs[0])
-                            selected_seqs = torch.tensor(selected_seqs).to(self.device)
-                            print(selected_seqs[0].size())
+                            # selected_seqs = [seq + [0] * (self.max_len - auto_round_len - len(seq)) for seq in selected_seqs]
+                            # print(selected_seqs[0])
+                            # selected_seqs = torch.tensor(selected_seqs).to(self.device)
+                            # print(selected_seqs[0].size())
                             for j in range(self.max_len - auto_round_len - 1, self.max_len - 1):
                                 lengths = torch.tensor([j + 1] * selected_seqs.size(0))
                                 labels = self.bb_model(selected_seqs.long(), lengths)
@@ -673,7 +673,7 @@ class AutoDataRankDistillationTrainer(metaclass=ABCMeta):
                 dis_train_loader, dis_val_loader = dis_train_loader_factory(self.args, self.model_code, 'autoregressive')
                 
                 if round == 8:
-                    self.auto_round_epoch = 50
+                    self.auto_round_epoch = 30
                 for epoch in range(self.auto_round_epoch):
                     accum_iter = self.train_one_epoch(epoch, accum_iter, dis_train_loader, dis_val_loader, stage=round + 1)
 
@@ -782,9 +782,6 @@ class AutoDataRankDistillationTrainer(metaclass=ABCMeta):
             self.export_root, 'models', 'best_acc_model.pth')).get(STATE_DICT_KEY)
         self.model.load_state_dict(wb_model)
 
-        all_seq_embeds = []
-        all_bb_seq_embeds = []
-
         self.model.eval()
         self.bb_model.eval()
         average_meter_set = AverageMeterSet()
@@ -796,45 +793,9 @@ class AutoDataRankDistillationTrainer(metaclass=ABCMeta):
                 self._update_dataloader_metrics(
                     tqdm_dataloader, average_meter_set)
                 
-                seqs, candidates, labels = batch
-                seqs = seqs.to(self.device)
-                x, mask = self.model.embedding(seqs.long())
-                seq_embeds = x.mean(dim=1)            # [B, D]
-                all_seq_embeds.append(seq_embeds.cpu().numpy())
-                # blackbox
-                bb_x, bb_mask = self.bb_model.embedding(seqs.long())
-                bb_seq_embeds = bb_x.mean(dim=1)
-                all_bb_seq_embeds.append(bb_seq_embeds.cpu().numpy())
-
-        
-
             average_metrics = average_meter_set.averages()
             with open(os.path.join(self.export_root, 'logs', 'test_metrics.json'), 'w') as f:
                 json.dump(average_metrics, f, indent=4)
-        
-        all_seq_embeds = np.concatenate(all_seq_embeds, axis=0)  # [N, D]
-        all_bb_seq_embeds = np.concatenate(all_bb_seq_embeds, axis=0)  # [N, D]
-
-        # all_seq_embeds, all_bb_seq_embeds: [N, D]
-        R, _ = orthogonal_procrustes(all_seq_embeds, all_bb_seq_embeds)
-        all_seq_embeds_aligned = all_seq_embeds @ R
-        # 合并后一起降维，保证空间可比
-        all_embeds = np.concatenate([all_seq_embeds_aligned, all_bb_seq_embeds], axis=0)  # [2N, D]
-        tsne = TSNE(n_components=2, random_state=42)
-        embeds_2d = tsne.fit_transform(all_embeds)
-        n = all_seq_embeds.shape[0]
-        seq_embeds_2d = embeds_2d[:n]
-        bb_seq_embeds_2d = embeds_2d[n:]
-
-        plt.figure(figsize=(8, 6))
-        plt.scatter(seq_embeds_2d[:, 0], seq_embeds_2d[:, 1], s=5, alpha=0.7, label='Surrogate Model')
-        plt.scatter(bb_seq_embeds_2d[:, 0], bb_seq_embeds_2d[:, 1], s=5, alpha=0.7, label='Target Model')
-        plt.xlabel('Dim 1')
-        plt.ylabel('Dim 2')
-        plt.title('Model Extraction Performance Visualization')
-        plt.legend()
-        plt.savefig('seq_embeds_2d.png', dpi=300)
-        plt.close()
         return average_metrics
     
     def filter_sequences_for_update(self, seqs, round, agreements):
@@ -903,60 +864,6 @@ class AutoDataRankDistillationTrainer(metaclass=ABCMeta):
         )
 
         return selected_indices
-
-
-    # def active_learning_selection(self, randomized_label, sorted_items, input_seqs):
-    #     self.model.eval()
-    #     # 计算每个候选项的熵分数
-    #     # entropy_scores = torch.zeros_like(randomized_label)
-    #     # for m in range(sorted_items.size(0)):
-    #     #     for n in range(sorted_items.size(1)):
-    #     #         item_id = sorted_items[m, n]
-    #     #         input_seqs[m, -1] = item_id
-    #     #         logits = self.model(input_seqs[m, :].unsqueeze(0).long())[:, -1, :]
-    #     #         # probabilities = F.softmax(logits, dim=-1)
-    #     #         probabilities = logits
-    #     #         entropy = -torch.sum(probabilities * torch.log(probabilities + 1e-9), dim=-1)  # 避免log(0)
-    #     #         entropy_scores[m, n] = entropy
-    #     batch_size, num_candidates = sorted_items.size()
-    #     seq_len = input_seqs.size(1)
-
-    #     # 扩展输入序列以包含所有候选项目
-    #     expanded_inputs = input_seqs.unsqueeze(1).expand(-1, num_candidates, -1)  # [B, C, L]
-    #     expanded_inputs = expanded_inputs.reshape(batch_size * num_candidates, seq_len)  # [B*C, L]
-        
-    #     # 将候选项目填充到序列末尾
-    #     expanded_inputs[:, -1] = sorted_items.view(-1)
-
-    #     # 分块处理（显存优化）
-    #     chunk_size = 500  # 根据显存调整
-    #     entropy_chunks = []
-        
-    #     # 按分块逐批处理
-    #     for chunk in torch.split(expanded_inputs, chunk_size, dim=0):
-    #         with torch.no_grad():  # 显式关闭梯度
-    #             logits = self.model(chunk.long())[:, -1, :]  # [chunk_size, vocab_size]
-                
-    #             # 计算概率分布（必须使用 softmax）
-    #             probabilities = F.softmax(logits, dim=-1)
-                
-    #             # 计算熵并收集结果
-    #             entropy = -torch.sum(probabilities * torch.log(probabilities + 1e-9), dim=-1)
-    #             entropy_chunks.append(entropy)  # 追加到列表
-
-    #     # 合并所有分块的熵结果
-    #     entropy = torch.cat(entropy_chunks, dim=0)  # [B*C]
-    #     entropy_scores = entropy.view(batch_size, num_candidates)  # [B, C]
-
-    #     # 选择熵最大的候选
-    #     selected_indices = torch.argmax(entropy_scores, dim=-1)  # [B]
-
-    #     # 更新选中计数
-#     for idx in range(batch_size):
-    #         selected_item = sorted_items[idx, selected_indices[idx]]
-    #         self.selected_items_count[selected_item] += 1
-
-    #     return selected_indices
 
 
     def bb_model_test(self):
