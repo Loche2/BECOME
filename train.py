@@ -39,7 +39,7 @@ def train(args, export_root=None, resume=False):
 
     trainer.train()
     trainer.test()
-
+    # trainer.embedding_test()
 
 if __name__ == "__main__":
     set_template(args)

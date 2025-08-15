@@ -30,7 +30,7 @@ import copy
 
 
 class AutoDataRankDistillationTrainer(metaclass=ABCMeta):
-    def __init__(self, args, model_code, model, bb_model, test_loader, export_root, loss='ranking', tau=1., margin_topk=0.5, margin_neg=1.0):
+    def __init__(self, args, model_code, model, bb_model, test_loader, export_root, loss='ranking', tau=1., margin_topk=0.75, margin_neg=1.5):
         self.args = args
         self.device = args.device
         self.num_items = args.num_items
@@ -796,6 +796,54 @@ class AutoDataRankDistillationTrainer(metaclass=ABCMeta):
             average_metrics = average_meter_set.averages()
             with open(os.path.join(self.export_root, 'logs', 'test_metrics.json'), 'w') as f:
                 json.dump(average_metrics, f, indent=4)
+
+        # all_seq_embeds = []
+        # all_bb_seq_embeds = []
+
+        #     dataset = dis_dataset_factory(self.args, self.model_code, 'autoregressive')
+        #     datatemp = dataset.load_dataset()
+        #     seqs = datatemp['seqs']
+        #     seqs = torch.tensor(seqs).to(self.device)
+        #     x, mask = self.model.embedding(seqs.long())
+        #     seq_embeds = x.mean(dim=1)            # [B, D]
+        #     all_seq_embeds.append(seq_embeds.cpu().numpy())
+        #     # blackbox
+        #     bb_x, bb_mask = self.bb_model.embedding(seqs.long())
+        #     bb_seq_embeds = bb_x.mean(dim=1)
+        #     all_bb_seq_embeds.append(bb_seq_embeds.cpu().numpy())
+
+        # all_seq_embeds = np.concatenate(all_seq_embeds, axis=0)  # [N, D]
+        # all_bb_seq_embeds = np.concatenate(all_bb_seq_embeds, axis=0)  # [N, D]
+
+        # # # all_seq_embeds, all_bb_seq_embeds: [N, D]
+        # # R, _ = orthogonal_procrustes(all_seq_embeds, all_bb_seq_embeds)
+        # # all_seq_embeds_aligned = all_seq_embeds @ R
+        # # # 合并后一起降维，保证空间可比
+        # # all_embeds = np.concatenate([all_seq_embeds_aligned, all_bb_seq_embeds], axis=0)  # [2N, D]
+        # # tsne = TSNE(n_components=2, random_state=42)
+        # # embeds_2d = tsne.fit_transform(all_embeds)
+        # # n = all_seq_embeds.shape[0]
+        # # seq_embeds_2d = embeds_2d[:n]
+        # # bb_seq_embeds_2d = embeds_2d[n:]
+
+        # # # 保存绘图数据，方便后续重新绘图
+        # # plot_data = {
+        # #     'seq_embeds_2d': seq_embeds_2d,
+        # #     'bb_seq_embeds_2d': bb_seq_embeds_2d,
+        # #     'average_metrics': average_metrics
+        # # }
+        
+        # # 确保目录存在
+        # os.makedirs(os.path.join(self.export_root, 'plot_data'), exist_ok=True)
+        # # np.savez(os.path.join(self.export_root, 'plot_data', 'embeds_data.npz'), **plot_data)
+        # # print(f"Plot data saved to {os.path.join(self.export_root, 'plot_data', 'embeds_data.npz')}")
+        
+        # # 额外保存高维embedding与对齐矩阵，便于后续分析/复用
+        # highdim_embeddings = {
+        #     'seq_embeds': all_bb_seq_embeds,         
+        # }
+        # np.savez(os.path.join(self.export_root, 'plot_data', 'embeds_highdim.npz'), **highdim_embeddings)
+        # print(f"High-dimensional embeddings saved to {os.path.join(self.export_root, 'plot_data', 'embeds_highdim.npz')}")
         return average_metrics
     
     def filter_sequences_for_update(self, seqs, round, agreements):

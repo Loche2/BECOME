@@ -1,3 +1,4 @@
+import pickle
 from config import STATE_DICT_KEY, OPTIMIZER_STATE_DICT_KEY
 from .utils import *
 from .loggers import *
@@ -6,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from torch.nn.utils.rnn import pad_sequence
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -126,23 +128,11 @@ class SASTrainer(metaclass=ABCMeta):
 
         average_meter_set = AverageMeterSet()
 
-        all_scores = []
-        average_scores = []
         with torch.no_grad():
             tqdm_dataloader = tqdm(self.test_loader)
             for batch_idx, batch in enumerate(tqdm_dataloader):
                 batch = [x.to(self.device) for x in batch]
                 metrics = self.calculate_metrics(batch)
-                
-                # seqs, candidates, labels = batch
-                # scores = self.model(seqs)
-                # scores = scores[:, -1, :]
-                # scores_sorted, indices = torch.sort(scores, dim=-1, descending=True)
-                # all_scores += scores_sorted[:, :100].cpu().numpy().tolist()
-                # average_scores += scores_sorted.cpu().numpy().tolist()
-                # scores = scores.gather(1, candidates)
-                # metrics = recalls_and_ndcgs_for_ks(scores, labels, self.metric_ks)
-
                 self._update_meter_set(average_meter_set, metrics)
                 self._update_dataloader_metrics(
                     tqdm_dataloader, average_meter_set)
@@ -152,6 +142,40 @@ class SASTrainer(metaclass=ABCMeta):
                 json.dump(average_metrics, f, indent=4)
         
         return average_metrics
+    
+    # def embedding_test(self):
+    #     with open('/home/zhoulei/BECOME/data/preprocessed/steam_min_rating0-min_uc5-min_sc5-splitleave_one_out/dataset.pkl', 'rb') as file:
+    #         data = pickle.load(file)
+    #     train_seqs = [seq[:40] for _, seq in sorted(data['train'].items())]
+    #     train_seqs = train_seqs[:1000]
+    #     # print(train_seqs[:5])
+    #     train_seqs = [[0] * (50 - len(seq)) + seq for seq in train_seqs]
+    #     train_seqs = torch.tensor(train_seqs, dtype=torch.long, device=self.device)
+    #     # train_seqs = [torch.tensor(s, dtype=torch.long) for s in train_seqs]
+    #     # train_seqs = pad_sequence(train_seqs, batch_first=True, padding_value=0).to(self.device)
+
+    #     best_model_dict = torch.load(os.path.join(
+    #         self.export_root, 'models', 'best_acc_model.pth')).get(STATE_DICT_KEY)
+    #     self.model.load_state_dict(best_model_dict)
+
+    #     all_seq_embeds = []
+    #     self.model.eval()
+
+    #     x, mask = self.model.embedding(train_seqs.long())
+    #     seq_embeds = x.mean(dim=1)            # [B, D]
+    #     all_seq_embeds.append(seq_embeds.detach().cpu().numpy())
+    #     all_seq_embeds = np.concatenate(all_seq_embeds, axis=0)  # [N, D]
+
+    #     os.makedirs(os.path.join(self.export_root, 'plot_data'), exist_ok=True)
+        
+    #     # 额外保存高维embedding与对齐矩阵，便于后续分析/复用
+    #     highdim_embeddings = {
+    #         'seq_embeds': all_seq_embeds,         
+    #     }
+    #     np.savez(os.path.join(self.export_root, 'plot_data', 'embeds_highdim.npz'), **highdim_embeddings)
+    #     print(f"High-dimensional embeddings saved to {os.path.join(self.export_root, 'plot_data', 'embeds_highdim.npz')}")
+
+            
 
     def calculate_loss(self, batch):
         seqs, labels, negs = batch

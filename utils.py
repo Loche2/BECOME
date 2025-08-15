@@ -97,7 +97,7 @@ def set_template(args):
     args.gamma = 1.
     args.enable_lr_warmup = False
     args.warmup_steps = 100
-    args.num_epochs = 100
+    args.num_epochs = 1000
 
     args.metric_ks = [1, 5, 10]
     args.best_metric = 'NDCG@10'

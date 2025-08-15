@@ -48,6 +48,7 @@ def distill(args, bb_model_root=None, export_root=None, resume=False):
             print('Failed to load old model, continue training new model...')
     trainer = AutoDataRankDistillationTrainer(args, args.model_code, model, bb_model, test_loader, export_root)
     trainer.train_autoregressive()
+    # trainer.test()
 
 
 if __name__ == "__main__":
