@@ -4,7 +4,7 @@ Code repository of the CIKM '26 paper "Budget and Frequency Controlled Cost-Awar
 
 ## Introduction
 
-<img src=visualize/framework.jpg>
+<img src=pics/framework.jpg>
 
 In this paper, we propose a novel approach, named Budget and Frequency Controlled Cost-Aware Model Extraction Attack (BECOME), for extracting black-box sequential recommenders, which extends the standard extraction framework with two cost-aware innovations: Feedback-Driven Dynamic Budgeting period-ically evaluates the victim model to refine query allocation and steer sequence generation adaptively. Rank-Aware Frequency Controlling integrates frequency constraints with ranking guidance in the next-item sampler to select high-value items and broaden information coverage.
 
