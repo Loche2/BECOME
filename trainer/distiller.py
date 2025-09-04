@@ -93,6 +93,8 @@ class AutoDataRankDistillationTrainer(metaclass=ABCMeta):
         self.active_learning = args.active_learning
 
     def calculate_loss(self, seqs, labels, candidates, lengths=None):
+        beta = 1
+
         if isinstance(self.model, BERT) or isinstance(self.model, SASRec):
             logits = self.model(seqs)[:, -1, :]
         elif isinstance(self.model, NARM):
@@ -117,8 +119,8 @@ class AutoDataRankDistillationTrainer(metaclass=ABCMeta):
             logits = torch.gather(logits, -1, candidates)
             logits_1 = logits[:, :-1].reshape(-1)
             logits_2 = logits[:, 1:].reshape(-1)
-            loss = self.loss_func_1(logits_1, logits_2, torch.ones(logits_1.shape).to(self.device))
-            loss += self.loss_func_2(logits.repeat_interleave(30, dim=-1), neg_logits, torch.ones(logits.repeat_interleave(30, dim=-1).shape).to(self.device))
+            loss = beta * self.loss_func_1(logits_1, logits_2, torch.ones(logits_1.shape).to(self.device))
+            loss += (1 - beta) * self.loss_func_2(logits.repeat_interleave(30, dim=-1), neg_logits, torch.ones(logits.repeat_interleave(30, dim=-1).shape).to(self.device))
             # loss += self.loss_func_2(logits, neg_logits, torch.ones(logits.shape).to(self.device))
 
 
@@ -896,7 +898,7 @@ class AutoDataRankDistillationTrainer(metaclass=ABCMeta):
         # 计算选择每个候选项的多样性分数
         diversity_scores = 1.0 / (torch.log(self.selected_items_count[sorted_items] + 1.0) + 1.0)
 
-        alpha = 0.8
+        alpha = 0.75
         sampling_prob = F.softmax(
             alpha * F.softmax(diversity_scores, dim=-1) + (1 - alpha) * F.softmax(randomized_label, dim=-1),
             dim=-1
