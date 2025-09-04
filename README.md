@@ -1,6 +1,6 @@
 # BECOME
 
-Code repository of the CIKM '26 paper "Budget and Frequency Controlled Cost-Aware Model Extraction Attack on Sequential Recommenders"
+Code repository of the CIKM '25 paper "Budget and Frequency Controlled Cost-Aware Model Extraction Attack on Sequential Recommenders"
 
 ## Introduction
 
