@@ -39,7 +39,7 @@ If you find this repo useful for your research, pleae cite our paper.
   author={Lei Zhou, Min Gao, Zongwei Wang, and Yibing Bai},
   booktitle={Proceedings of the 34th ACM International Conference on Information and Knowledge Management (CIKM ’25)},
   year={2025}
-  doi={xx.xxxx/xxxxxxx.xxxxxxx}
+  doi={10.1145/3746252.3761032}
 }
 ```
 
