@@ -27,21 +27,35 @@ class SASDataloader():
         self.sliding_size = args.sliding_window_size
         self.CLOZE_MASK_TOKEN = self.item_count + 1
 
-        val_negative_sampler = negative_sampler_factory(args.test_negative_sampler_code,
-                                                        self.train, self.val, self.test,
-                                                        self.user_count, self.item_count,
-                                                        args.test_negative_sample_size,
-                                                        args.test_negative_sampling_seed,
-                                                        'val', self.save_folder)
-        test_negative_sampler = negative_sampler_factory(args.test_negative_sampler_code,
-                                                         self.train, self.val, self.test,
-                                                         self.user_count, self.item_count,
-                                                         args.test_negative_sample_size,
-                                                         args.test_negative_sampling_seed,
-                                                         'test', self.save_folder)
+        if not self.args.rankall:
+            val_negative_sampler = negative_sampler_factory(args.test_negative_sampler_code,
+                                                            self.train, self.val, self.test,
+                                                            self.user_count, self.item_count,
+                                                            args.test_negative_sample_size,
+                                                            args.test_negative_sampling_seed,
+                                                            'val', self.save_folder)
+            test_negative_sampler = negative_sampler_factory(args.test_negative_sampler_code,
+                                                             self.train, self.val, self.test,
+                                                             self.user_count, self.item_count,
+                                                             args.test_negative_sample_size,
+                                                             args.test_negative_sampling_seed,
+                                                             'test', self.save_folder)
 
-        self.seen_samples, self.val_negative_samples = val_negative_sampler.get_negative_samples()
-        self.seen_samples, self.test_negative_samples = test_negative_sampler.get_negative_samples()
+            self.seen_samples, self.val_negative_samples = val_negative_sampler.get_negative_samples()
+            self.seen_samples, self.test_negative_samples = test_negative_sampler.get_negative_samples()
+        else:
+            # Rank all items: no negatives are sampled, so the held-out item is
+            # the only candidate. seen_samples is still built per user, since
+            # the SASRec training set draws its negatives outside it.
+            self.val_negative_samples, self.test_negative_samples = {}, {}
+            self.seen_samples = {}
+            for user in self.umap.values():
+                seen = set(self.train[user])
+                seen.update(self.val[user])
+                seen.update(self.test[user])
+                self.val_negative_samples[user] = []
+                self.test_negative_samples[user] = []
+                self.seen_samples[user] = seen
 
     @classmethod
     def code(cls):

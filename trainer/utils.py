@@ -62,6 +62,49 @@ def recalls_and_ndcgs_for_ks(scores, labels, ks):
     return metrics
 
 
+def recalls_and_ndcgs_for_ks_rankall(scores, candidates, labels, ks):
+    """
+    Recall@k and NDCG@k with the held-out item ranked against all items.
+
+    Ported unchanged from the counter-mea code base so both report the same
+    protocol. scores holds one column per item, with the padding column (and
+    BERT's mask column) already dropped, so column j is item j + 1; under
+    --rankall the dataloader leaves the held-out item as the only candidate,
+    candidates[:, 0].
+    """
+    metrics = {}
+
+    scores = scores
+    labels = labels
+    answer_count = labels.sum(1)
+
+    labels_float = labels.float()
+    rank = (-scores).argsort(dim=1) + 1
+
+    cut = rank
+    for k in sorted(ks, reverse=True):
+        cut = cut[:, :k]
+        for i in range(cut.shape[0]):
+            index = (cut[i] == candidates[i][0]).float()
+            try:
+                hits = torch.cat((hits, index.unsqueeze(0)), 0)
+            except:
+                hits = index.unsqueeze(0)
+        # hits = labels_float.gather(1, cut)
+        metrics['Recall@%d' % k] = \
+            (hits.sum(1) / torch.min(torch.Tensor([k]).to(
+                labels.device), labels.sum(1).float())).mean().cpu().item()
+
+        position = torch.arange(2, 2+k)
+        weights = 1 / torch.log2(position.float())
+        dcg = (hits * weights.to(hits.device)).sum(1)
+        idcg = torch.Tensor([weights[:min(int(n), k)].sum()
+                             for n in answer_count]).to(dcg.device)
+        ndcg = (dcg / idcg).mean()
+        metrics['NDCG@%d' % k] = ndcg.cpu().item()
+    return metrics
+
+
 def em_and_agreement(scores_rank, labels_rank):
     em = (scores_rank == labels_rank).float().mean()
     temp = np.hstack((scores_rank.numpy(), labels_rank.numpy()))

@@ -167,9 +167,11 @@ class BERTTrainer(metaclass=ABCMeta):
 
         scores = self.model(seqs)
         scores = scores[:, -1, :]
-        scores = scores.gather(1, candidates)
-
-        metrics = recalls_and_ndcgs_for_ks(scores, labels, self.metric_ks)
+        if not self.args.rankall:
+            scores = scores.gather(1, candidates)
+            metrics = recalls_and_ndcgs_for_ks(scores, labels, self.metric_ks)
+        else:
+            metrics = recalls_and_ndcgs_for_ks_rankall(scores[:, 1:-1], candidates, labels, self.metric_ks)
         return metrics
 
     def clip_gradients(self, limit=5):

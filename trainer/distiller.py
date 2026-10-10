@@ -143,6 +143,14 @@ class AutoDataRankDistillationTrainer(metaclass=ABCMeta):
             loss += self.loss_func_2(F.softmax(logits), torch.argmax(labels, dim=-1))
         return loss
 
+    def _ranking_metrics(self, scores, candidates, labels, model):
+        """Recall@k and NDCG@k of model's scores: over the sampled candidates, or over all items under --rankall."""
+        if not self.args.rankall:
+            return recalls_and_ndcgs_for_ks(scores.gather(1, candidates), labels, self.metric_ks)
+        # Drop the padding column, and BERT's mask column, so column + 1 is the item id.
+        item_scores = scores[:, 1:-1] if isinstance(model, BERT) else scores[:, 1:]
+        return recalls_and_ndcgs_for_ks_rankall(item_scores, candidates, labels, self.metric_ks)
+
     def calculate_metrics(self, batch, similarity=False):
         self.model.eval()
         self.bb_model.eval()
@@ -151,13 +159,13 @@ class AutoDataRankDistillationTrainer(metaclass=ABCMeta):
             seqs, candidates, labels = batch
             seqs, candidates, labels = seqs.to(self.device), candidates.to(self.device), labels.to(self.device)
             scores = self.model(seqs)[:, -1, :]
-            metrics = recalls_and_ndcgs_for_ks(scores.gather(1, candidates), labels, self.metric_ks)
+            metrics = self._ranking_metrics(scores, candidates, labels, self.model)
         elif isinstance(self.model, NARM):
             seqs, lengths, candidates, labels = batch
             seqs, candidates, labels = seqs.to(self.device), candidates.to(self.device), labels.to(self.device)
             lengths = lengths.flatten()
             scores = self.model(seqs, lengths)
-            metrics = recalls_and_ndcgs_for_ks(scores.gather(1, candidates), labels, self.metric_ks)
+            metrics = self._ranking_metrics(scores, candidates, labels, self.model)
 
         if similarity:
             if isinstance(self.model, BERT) and isinstance(self.bb_model, BERT):
@@ -926,13 +934,13 @@ class AutoDataRankDistillationTrainer(metaclass=ABCMeta):
                     seqs, candidates, labels = batch
                     seqs, candidates, labels = seqs.to(self.device), candidates.to(self.device), labels.to(self.device)
                     scores = self.bb_model(seqs)[:, -1, :]
-                    metrics = recalls_and_ndcgs_for_ks(scores.gather(1, candidates), labels, self.metric_ks)
+                    metrics = self._ranking_metrics(scores, candidates, labels, self.bb_model)
                 elif isinstance(self.model, NARM):
                     seqs, lengths, candidates, labels = batch
                     seqs, candidates, labels = seqs.to(self.device), candidates.to(self.device), labels.to(self.device)
                     lengths = lengths.flatten()
                     scores = self.bb_model(seqs, lengths)
-                    metrics = recalls_and_ndcgs_for_ks(scores.gather(1, candidates), labels, self.metric_ks)
+                    metrics = self._ranking_metrics(scores, candidates, labels, self.bb_model)
 
                 self._update_meter_set(average_meter_set, metrics)
                 self._update_dataloader_metrics(

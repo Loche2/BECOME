@@ -161,9 +161,11 @@ class RNNTrainer(metaclass=ABCMeta):
         seqs, candidates, labels = seqs.to(self.device), candidates.to(self.device), labels.to(self.device)
 
         scores = self.model(seqs, lengths)  # B x V
-        scores = scores.gather(1, candidates)  # B x C
-
-        metrics = recalls_and_ndcgs_for_ks(scores, labels, self.metric_ks)
+        if not self.args.rankall:
+            scores = scores.gather(1, candidates)  # B x C
+            metrics = recalls_and_ndcgs_for_ks(scores, labels, self.metric_ks)
+        else:
+            metrics = recalls_and_ndcgs_for_ks_rankall(scores[:, 1:], candidates, labels, self.metric_ks)
         return metrics
 
     def clip_gradients(self, limit=5):

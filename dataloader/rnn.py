@@ -23,21 +23,29 @@ class RNNDataloader():
         args.num_items = len(self.smap)
         self.max_len = args.bert_max_len
 
-        val_negative_sampler = negative_sampler_factory(args.test_negative_sampler_code,
-                                                        self.train, self.val, self.test,
-                                                        self.user_count, self.item_count,
-                                                        args.test_negative_sample_size,
-                                                        args.test_negative_sampling_seed,
-                                                        'val', self.save_folder)
-        test_negative_sampler = negative_sampler_factory(args.test_negative_sampler_code,
-                                                         self.train, self.val, self.test,
-                                                         self.user_count, self.item_count,
-                                                         args.test_negative_sample_size,
-                                                         args.test_negative_sampling_seed,
-                                                         'test', self.save_folder)
+        if not self.args.rankall:
+            val_negative_sampler = negative_sampler_factory(args.test_negative_sampler_code,
+                                                            self.train, self.val, self.test,
+                                                            self.user_count, self.item_count,
+                                                            args.test_negative_sample_size,
+                                                            args.test_negative_sampling_seed,
+                                                            'val', self.save_folder)
+            test_negative_sampler = negative_sampler_factory(args.test_negative_sampler_code,
+                                                             self.train, self.val, self.test,
+                                                             self.user_count, self.item_count,
+                                                             args.test_negative_sample_size,
+                                                             args.test_negative_sampling_seed,
+                                                             'test', self.save_folder)
 
-        self.seen_samples, self.val_negative_samples = val_negative_sampler.get_negative_samples()
-        self.seen_samples, self.test_negative_samples = test_negative_sampler.get_negative_samples()
+            self.seen_samples, self.val_negative_samples = val_negative_sampler.get_negative_samples()
+            self.seen_samples, self.test_negative_samples = test_negative_sampler.get_negative_samples()
+        else:
+            # Rank all items: no negatives are sampled, so the held-out item is
+            # the only candidate and the trainers rank it against every item.
+            self.val_negative_samples, self.test_negative_samples = {}, {}
+            for user in self.umap.values():
+                self.val_negative_samples[user] = []
+                self.test_negative_samples[user] = []
 
     @classmethod
     def code(cls):

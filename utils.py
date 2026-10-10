@@ -167,6 +167,9 @@ parser.add_argument('--num_epochs', type=int, default=100)
 parser.add_argument('--log_period_as_iter', type=int, default=12800)
 # evaluation #
 parser.add_argument('--metric_ks', nargs='+', type=int, default=[1, 5, 10, 20])
+# Rank the held-out item against all items instead of the sampled negatives,
+# as in the counter-mea code base.
+parser.add_argument('--rankall', action='store_true')
 parser.add_argument('--best_metric', type=str, default='NDCG@10')
 
 ################
